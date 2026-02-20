@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loading...</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --orange: #e8720c;
+    --orange-dim: #a04f08;
+    --bg: #0a0b0d;
+    --panel: #111318;
+    --border: #1e2330;
+    --text: #c8d0e0;
+    --muted: #4a5568;
+    --glow: rgba(232, 114, 12, 0.35);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Scanlines overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* Noise texture */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 998;
+    opacity: 0.5;
+  }
+
+  /* ─── Background Map ─── */
+  .bg-map {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    z-index: 0;
+  }
+
+  .bg-map canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.07;
+  }
+
+  /* ─── Header ─── */
+  .header {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    background: linear-gradient(180deg, rgba(10,11,13,1) 0%, rgba(10,11,13,0.7) 100%);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .server-name {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--orange);
+    text-shadow: 0 0 20px var(--glow);
+  }
+
+  .server-name span {
+    color: var(--text);
+    opacity: 0.5;
+    font-weight: 300;
+  }
+
+  .header-info {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.8;
+  }
+
+  .header-info .val {
+    color: var(--orange);
+  }
+
+  /* ─── Main Content ─── */
+  .main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 0;
+    position: relative;
+    z-index: 10;
+    overflow: hidden;
+  }
+
+  /* Left panel */
+  .left-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 24px 28px;
+    position: relative;
+  }
+
+  /* Map preview glow */
+  .map-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .map-name {
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: white;
+    line-height: 1;
+    text-shadow: 0 0 40px rgba(255,255,255,0.15);
+    animation: fadeUp 0.8s ease forwards;
+    opacity: 0;
+    animation-delay: 0.2s;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .map-desc {
+    margin-top: 10px;
+    font-size: 14px;
+    color: var(--muted);
+    max-width: 480px;
+    line-height: 1.5;
+    animation: fadeUp 0.8s ease forwards;
+    opacity: 0;
+    animation-delay: 0.4s;
+  }
+
+  /* ─── Tips ─── */
+  .tip-box {
+    margin-top: 28px;
+    padding: 14px 18px;
+    border-left: 2px solid var(--orange);
+    background: rgba(232,114,12,0.05);
+    animation: fadeUp 0.8s ease forwards;
+    opacity: 0;
+    animation-delay: 0.6s;
+    max-width: 500px;
+  }
+
+  .tip-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--orange);
+    margin-bottom: 5px;
+  }
+
+  .tip-text {
+    font-size: 13px;
+    color: var(--text);
+    opacity: 0.8;
+    line-height: 1.5;
+  }
+
+  /* ─── Right sidebar ─── */
+  .right-panel {
+    border-left: 1px solid var(--border);
+    background: rgba(17,19,24,0.6);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-section {
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-title::before {
+    content: '';
+    display: inline-block;
+    width: 14px;
+    height: 1px;
+    background: var(--orange);
+  }
+
+  /* Player list */
+  .player-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .player-list::-webkit-scrollbar { width: 3px; }
+  .player-list::-webkit-scrollbar-track { background: transparent; }
+  .player-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .player-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.02);
+    font-size: 13px;
+    animation: slideIn 0.4s ease forwards;
+    opacity: 0;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(12px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .player-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 2px;
+    background: var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: var(--orange);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .player-name { flex: 1; color: var(--text); font-size: 12px; }
+  .player-time { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--muted); }
+
+  /* Server stats */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .stat-item {
+    padding: 10px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+  }
+
+  .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--orange);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  /* Activity log */
+  .activity-log {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .log-entries {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 18px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .log-entries::-webkit-scrollbar { width: 3px; }
+  .log-entries::-webkit-scrollbar-track { background: transparent; }
+  .log-entries::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .log-entry {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.6;
+    display: flex;
+    gap: 8px;
+    animation: fadeIn 0.3s ease forwards;
+    opacity: 0;
+  }
+
+  @keyframes fadeIn {
+    to { opacity: 1; }
+  }
+
+  .log-time { color: var(--orange-dim); flex-shrink: 0; }
+  .log-msg { color: var(--muted); }
+  .log-msg .highlight { color: #7bb3f0; }
+
+  /* ─── Bottom progress area ─── */
+  .footer {
+    position: relative;
+    z-index: 10;
+    background: rgba(10,11,13,0.95);
+    border-top: 1px solid var(--border);
+    padding: 14px 28px;
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+
+  .progress-status {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--text);
+  }
+
+  .progress-pct {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--orange);
+    text-shadow: 0 0 12px var(--glow);
+  }
+
+  .progress-bar-track {
+    height: 4px;
+    background: var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--orange-dim), var(--orange));
+    width: 0%;
+    transition: width 0.3s ease;
+    position: relative;
+  }
+
+  .progress-bar-fill::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -2px;
+    width: 6px;
+    height: 8px;
+    background: white;
+    box-shadow: 0 0 10px var(--orange), 0 0 20px var(--orange);
+  }
+
+  /* Shimmer sweep */
+  .progress-bar-fill::before {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    left: -60px;
+    width: 60px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    animation: shimmer 1.2s ease infinite;
+  }
+
+  @keyframes shimmer {
+    0% { left: -60px; }
+    100% { left: 100%; }
+  }
+
+  .sub-progress {
+    margin-top: 10px;
+    display: flex;
+    gap: 3px;
+  }
+
+  .sub-bar {
+    flex: 1;
+    height: 2px;
+    background: var(--border);
+    transition: background 0.3s;
+  }
+
+  .sub-bar.done { background: var(--orange-dim); }
+  .sub-bar.active { background: var(--orange); }
+
+  /* Corner decoration */
+  .corner-dec {
+    position: fixed;
+    z-index: 11;
+    width: 60px;
+    height: 60px;
+    opacity: 0.3;
+  }
+
+  .corner-dec.tl { top: 0; left: 0; border-top: 2px solid var(--orange); border-left: 2px solid var(--orange); }
+  .corner-dec.tr { top: 0; right: 0; border-top: 2px solid var(--orange); border-right: 2px solid var(--orange); }
+  .corner-dec.bl { bottom: 0; left: 0; border-bottom: 2px solid var(--orange); border-left: 2px solid var(--orange); }
+  .corner-dec.br { bottom: 0; right: 0; border-bottom: 2px solid var(--orange); border-right: 2px solid var(--orange); }
+
+  /* Pulse dot */
+  .live-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #4caf50;
+    box-shadow: 0 0 8px #4caf50;
+    animation: pulse 1.4s ease infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.7); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Corner decorations -->
+<div class="corner-dec tl"></div>
+<div class="corner-dec tr"></div>
+<div class="corner-dec bl"></div>
+<div class="corner-dec br"></div>
+
+<!-- Animated background -->
+<div class="bg-map">
+  <canvas id="bgCanvas"></canvas>
+</div>
+
+<!-- Header -->
+<header class="header">
+  <div class="server-name" id="server-name">LOADING<span>...</span></div>
+  <div class="header-info">
+    <span class="live-dot"></span>SERVIDOR ONLINE<br>
+    MAP: <span class="val" id="hdr-map">--</span> &nbsp;|&nbsp;
+    JOGADORES: <span class="val" id="hdr-players">--</span> &nbsp;|&nbsp;
+    GAMEMODE: <span class="val" id="hdr-gamemode">--</span>
+  </div>
+</header>
+
+<!-- Main -->
+<div class="main">
+  <!-- Left -->
+  <div class="left-panel">
+    <div class="map-label">// MAPA ATUAL</div>
+    <div class="map-name" id="map-name">--</div>
+    <div class="map-desc" id="map-desc">Connecting to server...</div>
+
+    <div class="tip-box">
+      <div class="tip-label">// DICA DO SERVIDOR</div>
+      <div class="tip-text" id="tip-text">
+        Bem-vindo ao <strong>Novo Atomic</strong>! Aguarde enquanto o servidor carrega.
+      </div>
+    </div>
+  </div>
+
+  <!-- Right sidebar -->
+  <div class="right-panel">
+
+    <!-- Stats -->
+    <div class="panel-section">
+      <div class="section-title">Estatísticas</div>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-value" id="stat-players">--</div>
+          <div class="stat-label">JOGADORES</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="stat-maxplayers">--</div>
+          <div class="stat-label">VAGAS</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="stat-gamemode">--</div>
+          <div class="stat-label">GAMEMODE</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="stat-map">--</div>
+          <div class="stat-label">MAPA</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Players -->
+    <div class="panel-section">
+      <div class="section-title">Jogadores Online</div>
+      <div class="player-list" id="player-list">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);padding:6px;">
+          Buscando jogadores...
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Log -->
+    <div class="activity-log">
+      <div class="panel-section" style="border-bottom:1px solid var(--border)">
+        <div class="section-title">Log de Carregamento</div>
+      </div>
+      <div class="log-entries" id="log-entries"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Footer / Progress -->
+<footer class="footer">
+  <div class="progress-header">
+    <div class="progress-status" id="progress-status">Conectando...</div>
+    <div class="progress-pct" id="progress-pct">0%</div>
+  </div>
+  <div class="progress-bar-track">
+    <div class="progress-bar-fill" id="progress-fill"></div>
+  </div>
+  <div class="sub-progress" id="sub-progress"></div>
+</footer>
+
+<script>
+// ─── Background Canvas ─────────────────────────────────────────────
+const canvas = document.getElementById('bgCanvas');
+const ctx = canvas.getContext('2d');
+let W, H, points = [];
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  initPoints();
+}
+
+function initPoints() {
+  points = [];
+  const count = Math.floor((W * H) / 14000);
+  for (let i = 0; i < count; i++) {
+    points.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+    });
+  }
+}
+
+function drawBg() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(232,114,12,0.6)';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < 0 || p.x > W) p.vx *= -1;
+    if (p.y < 0 || p.y > H) p.vy *= -1;
+    for (let j = i + 1; j < points.length; j++) {
+      const q = points[j];
+      const dx = p.x - q.x, dy = p.y - q.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 120) {
+        ctx.globalAlpha = (1 - dist / 120) * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(q.x, q.y);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = 'rgba(232,114,12,0.8)';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 1.5, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  requestAnimationFrame(drawBg);
+}
+
+window.addEventListener('resize', resize);
+resize();
+drawBg();
+
+// ─── Parse GMod URL Parameters ─────────────────────────────────────
+// GMod passes these as query string params when loading the page:
+// ?hostname=...&maxplayers=...&map=...&gamemode=...&steamid=...&name=...&serverip=...
+const params = new URLSearchParams(window.location.search);
+
+const hostname   = params.get('hostname')   || 'NOVO ATOMIC';
+const mapname    = params.get('map')        || '--';
+const maxplayers = params.get('maxplayers') || '--';
+const gamemode   = params.get('gamemode')   || '--';
+const steamid    = params.get('steamid')    || '';
+const playername = params.get('name')       || '';
+const serverip   = params.get('serverip')   || '';
+
+// Populate header
+document.getElementById('server-name').textContent = hostname;
+document.getElementById('hdr-map').textContent = mapname;
+document.getElementById('hdr-players').textContent = `? / ${maxplayers}`;
+document.getElementById('hdr-gamemode').textContent = gamemode;
+
+// Populate left panel
+document.getElementById('map-name').textContent = mapname.toUpperCase();
+
+// Populate sidebar stats
+document.getElementById('stat-players').textContent = '?';
+document.getElementById('stat-maxplayers').textContent = maxplayers;
+// Shorten gamemode for small box
+document.getElementById('stat-gamemode').textContent = gamemode.length > 6 ? gamemode.substring(0,6) : gamemode;
+// Show first segment of map name
+document.getElementById('stat-map').textContent = mapname.split('_')[0] || mapname;
+
+// ─── Real GMod Progress Hook ───────────────────────────────────────
+// GMod calls window.SetStatusChanged(status, progress) during loading.
+// 'status' is a human-readable string. 'progress' is 0..1 (may not always be provided).
+
+const fill      = document.getElementById('progress-fill');
+const pctEl     = document.getElementById('progress-pct');
+const statusEl  = document.getElementById('progress-status');
+const subProg   = document.getElementById('sub-progress');
+const logContainer = document.getElementById('log-entries');
+
+let currentPct = 0;
+let targetPct  = 0;
+
+// The known GMod loading stages in order, used to estimate progress
+// when the game doesn't send a numeric value
+const knownStages = [
+  'Sending client info',
+  'Downloading',
+  'Loading lua',
+  'Sending client info',
+  'Receiving data',
+  'Initializing game',
+  'Sending client info',
+  'Joining game',
+];
+
+// Create 8 sub-bars (one per rough stage)
+for (let i = 0; i < 8; i++) {
+  const bar = document.createElement('div');
+  bar.className = 'sub-bar';
+  bar.id = `sub-${i}`;
+  subProg.appendChild(bar);
+}
+
+let lastStageIdx = -1;
+
+function addLogEntry(text, type) {
+  const now = new Date();
+  const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  const color = type === 'ok' ? '#4caf50' : type === 'warn' ? '#e8720c' : 'var(--muted)';
+  entry.innerHTML = `<span class="log-time">[${time}]</span><span class="log-msg" style="color:${color}">${text}</span>`;
+  logContainer.appendChild(entry);
+  logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function guessStageIndex(status) {
+  const s = status.toLowerCase();
+  if (s.includes('sending client')) return 0;
+  if (s.includes('download')) return 1;
+  if (s.includes('lua') || s.includes('script')) return 2;
+  if (s.includes('receiv')) return 3;
+  if (s.includes('initiali')) return 4;
+  if (s.includes('joining') || s.includes('spawn')) return 5;
+  if (s.includes('done') || s.includes('complete')) return 7;
+  return lastStageIdx + 1;
+}
+
+// ★ THIS IS THE REAL GMOD HOOK — called by the engine automatically
+window.SetStatusChanged = function(status, progress) {
+  // Update status text
+  statusEl.textContent = status;
+  addLogEntry(status, 'ok');
+
+  // Use numeric progress if provided (0 to 1), else estimate
+  if (typeof progress === 'number' && progress >= 0 && progress <= 1) {
+    targetPct = Math.round(progress * 100);
+  } else {
+    const idx = guessStageIndex(status);
+    lastStageIdx = Math.max(lastStageIdx, idx);
+    targetPct = Math.min(95, Math.round((lastStageIdx / 7) * 100));
+  }
+
+  // Update sub-bars
+  const barIdx = Math.min(7, Math.round(targetPct / 12.5));
+  for (let i = 0; i <= barIdx; i++) {
+    const bar = document.getElementById(`sub-${i}`);
+    if (!bar) continue;
+    if (i < barIdx) { bar.classList.remove('active'); bar.classList.add('done'); }
+    else            { bar.classList.add('active'); bar.classList.remove('done'); }
+  }
+};
+
+// Smooth progress animation loop
+function animateProgress() {
+  if (currentPct < targetPct) {
+    currentPct = Math.min(currentPct + 0.6, targetPct);
+    fill.style.width = currentPct + '%';
+    pctEl.textContent = Math.round(currentPct) + '%';
+  }
+  requestAnimationFrame(animateProgress);
+}
+animateProgress();
+
+// Log initial connection info
+addLogEntry(`Conectando ao ${hostname}...`, 'ok');
+if (playername) addLogEntry(`Jogador: ${playername}`, 'ok');
+if (mapname !== '--') addLogEntry(`Mapa: ${mapname}`, 'ok');
+if (gamemode !== '--') addLogEntry(`Gamemode: ${gamemode}`, 'ok');
+
+// ─── Real Player List via HTTP ─────────────────────────────────────
+// Your server's Lua (sv_loadingscreen.lua) must run an HTTP server
+// on a port (e.g. 27016) that returns JSON like:
+// [{"name":"PlayerOne","time":120},{"name":"PlayerTwo","time":45}]
+//
+// Replace YOUR_SERVER_IP and YOUR_HTTP_PORT below.
+// If you don't have this set up, the sidebar will just show "Awaiting data".
+
+const PLAYER_API = `http://${serverip.split(':')[0]}:27016/players`;
+
+const playerListEl = document.getElementById('player-list');
+
+function fetchPlayers() {
+  fetch(PLAYER_API)
+    .then(r => r.json())
+    .then(players => {
+      playerListEl.innerHTML = '';
+      document.getElementById('stat-players').textContent = players.length;
+      document.getElementById('hdr-players').textContent = `${players.length} / ${maxplayers}`;
+
+      if (players.length === 0) {
+        playerListEl.innerHTML = '<div style="font-family:\'Share Tech Mono\',monospace;font-size:10px;color:var(--muted);padding:6px;">No players online</div>';
+        return;
+      }
+
+      players.forEach((p, i) => {
+        const mins = Math.floor(p.time / 60);
+        const h = Math.floor(mins / 60), m = mins % 60;
+        const timeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+        const div = document.createElement('div');
+        div.className = 'player-item';
+        div.style.animationDelay = `${i * 0.06}s`;
+        div.innerHTML = `
+          <div class="player-avatar">${p.name[0].toUpperCase()}</div>
+          <div class="player-name">${p.name}</div>
+          <div class="player-time">${timeStr}</div>
+        `;
+        playerListEl.appendChild(div);
+      });
+    })
+    .catch(() => {
+      // Server HTTP not set up — show a friendly message
+      playerListEl.innerHTML = '<div style="font-family:\'Share Tech Mono\',monospace;font-size:10px;color:var(--muted);padding:6px;">Lista indisponível<br><span style="color:var(--orange-dim)">Veja o README para configurar sv_loadingscreen.lua</span></div>';
+    });
+}
+
+// Fetch immediately, then refresh every 10 seconds
+fetchPlayers();
+setInterval(fetchPlayers, 10000);
+
+// ─── Tips rotation (edite para as regras do SEU servidor) ──────────
+const tips = [
+  'Bem vindo ao <strong>Novo Atomic</strong> sem putaria bb',
+  'nao crashe seu filha da puta',
+  
+];
+
+let tipIdx = 0;
+const tipTextEl = document.getElementById('tip-text');
+tipTextEl.innerHTML = tips[0];
+
+setInterval(() => {
+  tipIdx = (tipIdx + 1) % tips.length;
+  tipTextEl.style.opacity = 0;
+  setTimeout(() => {
+    tipTextEl.innerHTML = tips[tipIdx];
+    tipTextEl.style.transition = 'opacity 0.4s';
+    tipTextEl.style.opacity = 1;
+  }, 400);
+}, 6000);
+</script>
+</body>
+</html>
